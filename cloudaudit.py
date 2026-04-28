@@ -24,6 +24,8 @@ class CloudAudit:
         self.provider = None
         self.findings = []
         self.checks = []
+        
+        self._global_services = ["iam", "cloudtrail", "s3", "route53", "cloudfront", "shield", "waf"]
     
     def _load_checks(self):
         check_classes = []
@@ -57,8 +59,6 @@ class CloudAudit:
             ec2_security_groups_opens_ssh(),
             ec2_public_ips(),
         ]
-        
-        return check_classes
     
     def run(self, service_filter=None, check_filter=None):
         self.provider = AWSProvider()
