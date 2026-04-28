@@ -1,4 +1,5 @@
 from lib.check.models import Check, Check_Report_AWS
+from lib.allowlisters import allowlisters
 from providers.aws.services.s3.s3_client import get_s3_client
 from providers.aws.aws_provider import AWSProvider
 
@@ -37,7 +38,34 @@ class s3_bucket_public_access(Check):
 
     def execute(self):
         findings = []
-        client = get_s3_client()
+        
+        try:
+            client = get_s3_client()
+        except Exception as e:
+            report = Check_Report_AWS(
+                check_id=self.CheckID,
+                check_metadata=self._metadata,
+                resource=None
+            )
+            report.status = "UNKNOWN"
+            report.status_extended = f"Unable to scan S3: {str(e)}"
+            report.region = self._metadata.get("region", "us-east-1")
+            report.resource_id = "s3"
+            findings.append(report)
+            return findings
+        
+        if not client.buckets:
+            report = Check_Report_AWS(
+                check_id=self.CheckID,
+                check_metadata=self._metadata,
+                resource=None
+            )
+            report.status = "UNKNOWN"
+            report.status_extended = "No S3 buckets found in account"
+            report.region = client.region
+            report.resource_id = "s3"
+            findings.append(report)
+            return findings
         
         for bucket in client.buckets:
             report = Check_Report_AWS(
