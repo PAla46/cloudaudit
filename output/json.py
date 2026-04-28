@@ -326,16 +326,6 @@ class HTMLOutput:
             compliance = get_requirement_mapping(check_id)
             compliance_str = ", ".join([r.get("requirement_id", "") for r in compliance])
             
-            check_title = ""
-            risk = ""
-            remediation = ""
-            
-            if hasattr(f, "check_metadata"):
-                check_title = f.check_metadata.CheckTitle
-                risk = f.check_metadata.Risk
-                if f.check_metadata.Remediation:
-                    remediation = f.check_metadata.Remediation.get("Recommendation", {}).get("Text", "")
-            
             status_class = "bg-success-custom" if data.get("status") == "PASS" else "bg-danger" if data.get("status") == "FAIL" else "bg-warning"
             
             row = f"""<tr>
@@ -345,7 +335,6 @@ class HTMLOutput:
                 <td>{data.get('severity', '').upper()}</td>
                 <td>{data.get('service', '')}</td>
                 <td>{data.get('region', '')}</td>
-                <td>{check_title}</td>
                 <td>{compliance_str}</td>
                 <td>{data.get('status_extended', '')}</td>
             </tr>"""
@@ -379,8 +368,9 @@ class HTMLOutput:
     <style>
         .dataTable {{font-size: 13px;}}
         .container-fluid {{font-size: 14px;}}
-        td {{max-width: 250px; word-wrap: break-word;}}
-        th {{white-space: nowrap;}}
+        td, th {{text-align: center; vertical-align: middle !important;}}
+        th {{background-color: #008FBF !important; color: white !important;}}
+        td:first-child, th:first-child {{text-align: left;}}
     </style>
     <title>CloudAudit - Security Report</title>
 </head>
@@ -389,9 +379,7 @@ class HTMLOutput:
         <!-- Header -->
         <div class="row mt-3 mb-3" style="border-bottom: 3px solid #008FBF; padding-bottom: 10px;">
             <div class="col-md-6">
-                <h1 style="color: #008FBF; margin: 0;">
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/EY_logo_%282019%29.svg/300px-EY_logo_%282019%29.svg.png" alt="EY Logo" style="height: 60px;"/>
-                </h1>
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/EY_logo_%282019%29.svg/300px-EY_logo_%282019%29.svg.png" alt="EY Logo" style="height: 60px;"/>
             </div>
             <div class="col-md-6 text-right">
                 <h4 style="color: #666; margin-top: 20px;">Cloud Security Audit Report</h4>
@@ -465,10 +453,10 @@ class HTMLOutput:
             <div class="card-header" style="background-color: #008FBF; color: white;">
                 <i class="fas fa-shield-alt"></i> Security Findings
             </div>
-            <div class="table-wrap">
-            <table id="table" class="table table-striped table-hover dataTable" style="width:100%">
+            <div class="table-wrap" style="overflow-x: auto;">
+            <table id="table" class="table table-striped table-bordered" style="width:100%; margin: 0;">
             <thead>
-                <tr style="background-color: #f8f9fa;">
+                <tr>
                     <th>Check ID</th>
                     <th>Status</th>
                     <th>Resource</th>
@@ -506,7 +494,7 @@ class HTMLOutput:
                 buttons: ['copy', 'csv', 'excel', 'pdf'],
                 order: [[3, 'desc'], [0, 'asc']],
                 pageLength: 25,
-                scrollX: true
+                scrollX: false
             }});
         }});
     </script>
