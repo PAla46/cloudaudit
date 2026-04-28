@@ -11,7 +11,7 @@ from providers.aws.services.ec2.ec2_client import ec2_client
 from providers.aws.services.cloudtrail.cloudtrail_client import cloudtrail_client
 from providers.aws.services.rds.rds_client import rds_client
 from providers.aws.aws_provider import AWSProvider
-from output.json import JSONOutput, CSVOutput, HTMLOutput
+from output.json import JSONOutput, CSVOutput, HTMLOutput, ComplianceCSVOutput
 import json
 import argparse
 from datetime import datetime
@@ -253,8 +253,9 @@ def main():
         "html": HTMLOutput(),
     }
     
-    output_format = args.output
-    output_file = args.output_file
+    compliance_handlers = {
+        "csv": ComplianceCSVOutput(),
+    }
     
     if output_file:
         handler = output_handlers.get(output_format)
@@ -266,6 +267,13 @@ def main():
             filename = f"{base_filename}.{fmt}"
             handler = output_handlers.get(fmt)
             handler.write(findings, filename, account_id)
+            print(f"Generated: {filename}", file=sys.stderr)
+        
+        compliance_base = f"cloudaudit-{account_id}-{timestamp}_compliance-cis_aws"
+        for fmt in ["csv"]:
+            filename = f"{compliance_base}.{fmt}"
+            handler = compliance_handlers.get(fmt)
+            handler.write(findings, filename, account_id, "cis")
             print(f"Generated: {filename}", file=sys.stderr)
 
 

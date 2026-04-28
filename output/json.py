@@ -1,7 +1,139 @@
+import json
 import csv
 import sys
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict
+
+
+COMPLIANCE_FILES = {
+    "cis": "compliance/aws/cis_aws.json",
+}
+
+
+def load_compliance_mapping(framework: str = "cis") -> Dict:
+    """Load compliance mapping from JSON file"""
+    filepath = COMPLIANCE_FILES.get(framework, f"compliance/aws/{framework}_aws.json")
+    try:
+        with open(filepath) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+
+def get_requirement_mapping(check_id: str, framework: str = "cis") -> List[Dict]:
+    """Find which compliance requirements map to a check"""
+    mapping = load_compliance_mapping(framework)
+    requirements = mapping.get("Requirements", [])
+    
+    matched = []
+    for req in requirements:
+        if check_id in req.get("Checks", []):
+            matched.append({
+                "requirement_id": req.get("Id"),
+                "description": req.get("Description"),
+                "section": req.get("Attributes", {}).get("Section", ""),
+                "profile": req.get("Attributes", {}).get("Profile", ""),
+                "assessment_status": req.get("Attributes", {}).get("AssessmentStatus", ""),
+            })
+    
+    return matched
+
+
+class ComplianceCSVOutput:
+    def __init__(self):
+        self.framework = "CIS"
+    
+    def write(self, findings: List, filename: Optional[str] = None, account_id: str = "", framework: str = "cis") -> str:
+        mapping = load_compliance_mapping(framework)
+        requirements = mapping.get("Requirements", [])
+        
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        
+        columns = [
+            "PROVIDER", "DESCRIPTION", "ACCOUNTID", "REGION", "ASSESSMENTDATE",
+            "REQUIREMENTS_ID", "REQUIREMENTS_DESCRIPTION",
+            "REQUIREMENTS_ATTRIBUTES_SECTION", "REQUIREMENTS_ATTRIBUTES_PROFILE",
+            "REQUIREMENTS_ATTRIBUTES_ASSESSMENTSTATUS",
+            "STATUS", "STATUSEXTENDED", "RESOURCEID", "RESOURCENAME",
+            "CHECKID", "MUTED", "FRAMEWORK", "NAME"
+        ]
+        
+        rows = []
+        for finding in findings:
+            data = finding.as_dict() if hasattr(finding, "as_dict") else {
+                "check_id": finding.check_id,
+                "status": finding.status,
+                "status_extended": finding.status_extended,
+                "resource_id": finding.resource_id,
+                "region": getattr(finding, "region", "us-east-1"),
+            }
+            
+            check_id = data.get("check_id", "")
+            status = data.get("status", "")
+            
+            matched_requirements = [
+                req for req in requirements 
+                if check_id in req.get("Checks", [])
+            ]
+            
+            if not matched_requirements:
+                rows.append({
+                    "PROVIDER": "aws",
+                    "DESCRIPTION": mapping.get("Description", ""),
+                    "ACCOUNTID": account_id,
+                    "REGION": data.get("region", "us-east-1"),
+                    "ASSESSMENTDATE": timestamp,
+                    "REQUIREMENTS_ID": "",
+                    "REQUIREMENTS_DESCRIPTION": f"Check {check_id} not mapped to {framework}",
+                    "REQUIREMENTS_ATTRIBUTES_SECTION": "",
+                    "REQUIREMENTS_ATTRIBUTES_PROFILE": "",
+                    "REQUIREMENTS_ATTRIBUTES_ASSESSMENTSTATUS": "",
+                    "STATUS": "MANUAL",
+                    "STATUSEXTENDED": check_id,
+                    "RESOURCEID": "",
+                    "RESOURCENAME": account_id,
+                    "CHECKID": check_id,
+                    "MUTED": "False",
+                    "FRAMEWORK": mapping.get("Framework", framework.upper()),
+                    "NAME": mapping.get("Name", "")
+                })
+            else:
+                for req in matched_requirements:
+                    attrs = req.get("Attributes", {})
+                    rows.append({
+                        "PROVIDER": "aws",
+                        "DESCRIPTION": mapping.get("Description", ""),
+                        "ACCOUNTID": account_id,
+                        "REGION": data.get("region", "us-east-1"),
+                        "ASSESSMENTDATE": timestamp,
+                        "REQUIREMENTS_ID": req.get("Id", ""),
+                        "REQUIREMENTS_DESCRIPTION": req.get("Description", ""),
+                        "REQUIREMENTS_ATTRIBUTES_SECTION": attrs.get("Section", ""),
+                        "REQUIREMENTS_ATTRIBUTES_PROFILE": attrs.get("Profile", ""),
+                        "REQUIREMENTS_ATTRIBUTES_ASSESSMENTSTATUS": attrs.get("AssessmentStatus", ""),
+                        "STATUS": "PASS" if status == "PASS" else "FAIL",
+                        "STATUSEXTENDED": data.get("status_extended", ""),
+                        "RESOURCEID": data.get("resource_id", ""),
+                        "RESOURCENAME": data.get("resource_id", ""),
+                        "CHECKID": check_id,
+                        "MUTED": "False",
+                        "FRAMEWORK": mapping.get("Framework", framework.upper()),
+                        "NAME": mapping.get("Name", "")
+                    })
+        
+        import io
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=columns, delimiter=';')
+        writer.writeheader()
+        writer.writerows(rows)
+        
+        csv_str = output.getvalue()
+        
+        if filename:
+            with open(filename, "w", newline="", encoding="utf-8") as f:
+                f.write(csv_str)
+        
+        return csv_str
 
 
 class CSVOutput:
@@ -61,6 +193,10 @@ class CSVOutput:
                 "arn": getattr(f, "resource_arn", ""),
             }
             
+            check_id = data.get("check_id", "")
+            compliance = get_requirement_mapping(check_id)
+            compliance_str = ", ".join([r.get("requirement_id", "") for r in compliance])
+            
             row = {
                 "AUTH_METHOD": "profile",
                 "TIMESTAMP": timestamp,
@@ -70,9 +206,9 @@ class CSVOutput:
                 "ACCOUNT_ORGANIZATION_UID": "",
                 "ACCOUNT_ORGANIZATION_NAME": "",
                 "ACCOUNT_TAGS": "",
-                "FINDING_UID": f"{data.get('check_id', '')}-{account_id}-{data.get('region', 'us-east-1')}-{data.get('resource_id', '')}",
+                "FINDING_UID": f"{check_id}-{account_id}-{data.get('region', 'us-east-1')}-{data.get('resource_id', '')}",
                 "PROVIDER": "aws",
-                "CHECK_ID": data.get("check_id", ""),
+                "CHECK_ID": check_id,
                 "CHECK_TITLE": "",
                 "CHECK_TYPE": "",
                 "STATUS": data.get("status", ""),
@@ -94,7 +230,7 @@ class CSVOutput:
                 "REMEDIATION_RECOMMENDATION_TEXT": "",
                 "REMEDIATION_RECOMMENDATION_URL": "",
                 "REMEDIATION_CODE_CLI": "",
-                "COMPLIANCE": "",
+                "COMPLIANCE": compliance_str,
                 "CATEGORIES": "",
                 "NOTES": "",
                 "PROWLER_VERSION": "0.1.0",
@@ -124,24 +260,30 @@ class JSONOutput:
         import json
         timestamp = datetime.utcnow().isoformat() + "Z"
         
+        findings_with_compliance = []
+        for f in findings:
+            data = f.as_dict() if hasattr(f, "as_dict") else {
+                "check_id": f.check_id,
+                "status": f.status,
+                "status_extended": f.status_extended,
+                "resource_id": f.resource_id,
+                "severity": f.check_metadata.Severity if hasattr(f, "check_metadata") else "medium",
+                "service": f.check_metadata.ServiceName if hasattr(f, "check_metadata") else "",
+                "region": getattr(f, "region", ""),
+                "arn": getattr(f, "resource_arn", ""),
+            }
+            
+            check_id = data.get("check_id", "")
+            compliance = get_requirement_mapping(check_id)
+            data["compliance"] = compliance
+            findings_with_compliance.append(data)
+        
         output = {
             "version": self.version,
             "timestamp": timestamp,
             "count": len(findings),
             "account_id": account_id,
-            "findings": [
-                f.as_dict() if hasattr(f, "as_dict") else {
-                    "check_id": f.check_id,
-                    "status": f.status,
-                    "status_extended": f.status_extended,
-                    "resource_id": f.resource_id,
-                    "severity": f.check_metadata.Severity if hasattr(f, "check_metadata") else "medium",
-                    "service": f.check_metadata.ServiceName if hasattr(f, "check_metadata") else "",
-                    "region": getattr(f, "region", ""),
-                    "arn": getattr(f, "resource_arn", ""),
-                }
-                for f in findings
-            ]
+            "findings": findings_with_compliance
         }
         
         json_str = json.dumps(output, indent=2)
@@ -171,11 +313,15 @@ class HTMLOutput:
                 "status": f.status,
                 "status_extended": f.status_extended,
                 "resource_id": f.resource_id,
-                "severity": f.check_metadata.Severity if hasattr(f, "check_metadata") else "medium",
-                "service": f.check_metadata.ServiceName if hasattr(f, "check_metadata") else "",
+                "severity": f.check_metadata.Severity,
+                "service": f.check_metadata.ServiceName,
                 "region": getattr(f, "region", ""),
                 "arn": getattr(f, "resource_arn", ""),
             }
+            
+            check_id = data.get("check_id", "")
+            compliance = get_requirement_mapping(check_id)
+            compliance_str = ", ".join([r.get("requirement_id", "") for r in compliance])
             
             status_class = "bg-success-custom" if data.get("status") == "PASS" else "bg-danger" if data.get("status") == "FAIL" else "bg-warning"
             
@@ -186,6 +332,7 @@ class HTMLOutput:
                 <td>{data.get('severity', '').upper()}</td>
                 <td>{data.get('service', '')}</td>
                 <td>{data.get('region', '')}</td>
+                <td>{compliance_str}</td>
                 <td>{data.get('status_extended', '')}</td>
             </tr>"""
             rows.append(row)
@@ -247,6 +394,7 @@ class HTMLOutput:
                     <th>Severity</th>
                     <th>Service</th>
                     <th>Region</th>
+                    <th>Compliance</th>
                     <th>Message</th>
                 </tr>
             </thead>
