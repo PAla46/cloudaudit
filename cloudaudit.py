@@ -242,9 +242,11 @@ def main():
     }
     
     output_format = args.output
+    output_file = args.output_file
+    
     if output_file:
         handler = output_handlers.get(output_format)
-        output = handler.write(findings, output_file, account_id)
+        handler.write(findings, output_file, account_id)
     else:
         base_filename = f"cloudaudit-{account_id}-{timestamp}"
         
