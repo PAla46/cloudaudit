@@ -29,10 +29,62 @@ class AWSCLIError(Exception):
     pass
 
 
+class AWSCLI:
+    @staticmethod
+    def run(command: list, parse_json: bool = True) -> Any:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() or result.stdout.strip()
+            raise AWSCLIError(f"Command failed: {' '.join(command)}\nError: {error_msg}")
+        
+        if parse_json:
+            try:
+                return json.loads(result.stdout) if result.stdout.strip() else []
+            except json.JSONDecodeError:
+                return result.stdout.strip()
+        return result.stdout
+
+    @staticmethod
+    def run_paginated(command: list, next_token_key: str = "NextToken") -> list:
+        results = []
+        next_token = None
+        
+        while True:
+            cmd = command.copy()
+            if next_token:
+                cmd.extend(["--starting-token", next_token])
+            
+            output = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if output.returncode != 0:
+                raise AWSCLIError(f"Command failed: {' '.join(cmd)}\n{output.stderr}")
+            
+            data = json.loads(output.stdout) if output.stdout.strip() else {}
+            
+            if isinstance(data, dict):
+                results.extend(data.get("Buckets", []) or data.get("Users", []) or data.get("Instances", []) or data.get("SecurityGroups", []))
+                next_token = data.get(next_token_key)
+            elif isinstance(data, list):
+                results.extend(data)
+                break
+            
+            if not next_token:
+                break
+        
+        return results
+
+
 class AWSProvider:
     def __init__(self, region: str = "us-east-1"):
         self.region = region
         self.cli = AWSCLI()
+        self._identity = None
+        self.available_regions = get_available_regions()
         self._identity = None
         self.available_regions = get_available_regions()
     
