@@ -1,4 +1,5 @@
 from lib.check.models import Check, Check_Report_AWS, CheckMetadata
+from providers.aws.services.iam.iam_client import get_iam_client
 
 
 class iam_root_mfa_enabled(Check):
@@ -37,10 +38,8 @@ class iam_root_mfa_enabled(Check):
         findings = []
         
         try:
-            from providers.aws.services.iam.iam_client import get_iam_client
             client = get_iam_client()
         except Exception as e:
-            from lib.check.models import Check_Report_AWS
             report = Check_Report_AWS(
                 check_id=self.CheckID,
                 check_metadata=self._metadata,
