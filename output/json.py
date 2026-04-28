@@ -306,6 +306,9 @@ class HTMLOutput:
         fail_count = sum(1 for f in findings if f.status == "FAIL" or (hasattr(f, "status") and f.status == "FAIL"))
         unknown_count = sum(1 for f in findings if f.status == "UNKNOWN" or (hasattr(f, "status") and f.status == "UNKNOWN"))
         
+        critical_count = sum(1 for f in findings if (hasattr(f, "check_metadata") and f.check_metadata.Severity == "critical") or (hasattr(f, "severity") and f.severity == "critical"))
+        high_count = sum(1 for f in findings if (hasattr(f, "check_metadata") and f.check_metadata.Severity == "high") or (hasattr(f, "severity") and f.severity == "high"))
+        
         rows = []
         for f in findings:
             data = f.as_dict() if hasattr(f, "as_dict") else {
@@ -345,12 +348,8 @@ class HTMLOutput:
                 <td>{check_title}</td>
                 <td>{compliance_str}</td>
                 <td>{data.get('status_extended', '')}</td>
-                <td>{risk[:100]}...<br/>{remediation[:100]}...</td>
             </tr>"""
             rows.append(row)
-        
-        critical_count = sum(1 for f in findings if (hasattr(f, "check_metadata") and f.check_metadata.Severity == "critical") or (hasattr(f, "severity") and f.severity == "critical"))
-        high_count = sum(1 for f in findings if (hasattr(f, "check_metadata") and f.check_metadata.Severity == "high") or (hasattr(f, "severity") and f.severity == "high"))
         
         html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -361,7 +360,18 @@ class HTMLOutput:
         .bg-success-custom {{background-color: #98dea7 !important;}}
         .bg-danger {{background-color: #f28484 !important;}}
         .bg-warning {{background-color: #f5c518 !important;}}
+        .bg-critical {{background-color: #d63031 !important; color: white;}}
+        .bg-high {{background-color: #e17055 !important; color: white;}}
         .table-wrap {{overflow-x: auto;}}
+        .summary-box {{
+            border-radius: 8px;
+            padding: 15px;
+            margin: 5px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .summary-box h1 {{margin: 0; font-size: 2.5rem;}}
+        .summary-box small {{font-size: 0.8rem; text-transform: uppercase;}}
     </style>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://cdn.datatables.net/v/dt/jqc-1.12.4/dt-1.10.25/b-1.7.1/sp-1.4.0/sl-1.3.3/datatables.min.css" />
@@ -369,105 +379,104 @@ class HTMLOutput:
     <style>
         .dataTable {{font-size: 13px;}}
         .container-fluid {{font-size: 14px;}}
-        .float-left {{ float: left !important; max-width: 100%; }}
-        td {{max-width: 300px; word-wrap: break-word;}}
+        td {{max-width: 250px; word-wrap: break-word;}}
+        th {{white-space: nowrap;}}
     </style>
-    <title>CloudAudit - Cloud Security Report</title>
+    <title>CloudAudit - Security Report</title>
 </head>
 <body>
     <div class="container-fluid">
-        <div class="row mt-3 mb-3">
-            <div class="col-md-3">
-                <img src="https://raw.githubusercontent.com/prowler-cloud/prowler/dc7d2d5aeb92fdf12e8604f42ef6472cd3e8e889/docs/img/prowler-logo-black.png" alt="CloudAudit Logo" style="width:150px;"/>
+        <!-- Header -->
+        <div class="row mt-3 mb-3" style="border-bottom: 3px solid #008FBF; padding-bottom: 10px;">
+            <div class="col-md-6">
+                <h1 style="color: #008FBF; margin: 0;">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/EY_logo_%282019%29.svg/300px-EY_logo_%282019%29.svg.png" alt="EY Logo" style="height: 60px;"/>
+                </h1>
             </div>
-            <div class="col-md-9">
-                <h2>CloudAudit Security Report</h2>
+            <div class="col-md-6 text-right">
+                <h4 style="color: #666; margin-top: 20px;">Cloud Security Audit Report</h4>
             </div>
         </div>
         
+        <!-- Report Info & Summary Cards Row -->
         <div class="row mt-3">
-        <div class="col-md-3">
-            <div class="card">
-            <div class="card-header bg-primary text-white">Report Information</div>
-            <ul class="list-group list-group-flush">
-                <li class="list-group-item"><b>Tool:</b> CloudAudit 0.1.0</li>
-                <li class="list-group-item"><b>Provider:</b> AWS</li>
-                <li class="list-group-item"><b>Date:</b> {timestamp}</li>
-                <li class="list-group-item"><b>Account ID:</b> {account_id}</li>
-                <li class="list-group-item"><b>Framework:</b> CIS AWS Foundations</li>
-            </ul>
+            <!-- Report Information -->
+            <div class="col-md-4">
+                <div class="card" style="border-left: 4px solid #008FBF;">
+                    <div class="card-header" style="background-color: #008FBF; color: white;">
+                        <i class="fas fa-info-circle"></i> Report Information
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item"><strong>Tool:</strong> CloudAudit v0.1.0</li>
+                        <li class="list-group-item"><strong>Provider:</strong> AWS</li>
+                        <li class="list-group-item"><strong>Date:</strong> {timestamp}</li>
+                        <li class="list-group-item"><strong>Account ID:</strong> {account_id}</li>
+                        <li class="list-group-item"><strong>Framework:</strong> CIS AWS Foundations</li>
+                    </ul>
+                </div>
             </div>
-        </div>
-        <div class="col-md-9">
-            <div class="card">
-            <div class="card-header bg-primary text-white">Executive Summary</div>
-            <div class="row text-center">
-                <div class="col-md-3">
-                    <div class="card bg-danger text-white mb-3">
-                        <div class="card-body">
-                            <h2 class="mb-0">{fail_count}</h2>
-                            <small>FAIL</small>
+            
+            <!-- Summary Cards -->
+            <div class="col-md-8">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="summary-box bg-danger">
+                            <h1>{fail_count}</h1>
+                            <small>Findings</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="summary-box bg-success-custom">
+                            <h1>{pass_count}</h1>
+                            <small>Passed</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="summary-box bg-warning">
+                            <h1>{unknown_count}</h1>
+                            <small>Unknown</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="summary-box bg-primary text-white">
+                            <h1>{len(findings)}</h1>
+                            <small>Total Checks</small>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="card bg-success-custom text-white mb-3">
-                        <div class="card-body">
-                            <h2 class="mb-0">{pass_count}</h2>
-                            <small>PASS</small>
-                        </div>
+                <div class="row mt-2">
+                    <div class="col-md-4">
+                        <span class="badge badge-danger" style="font-size: 14px; padding: 8px;">{critical_count} Critical</span>
                     </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card bg-warning mb-3">
-                        <div class="card-body">
-                            <h2 class="mb-0">{unknown_count}</h2>
-                            <small>UNKNOWN</small>
-                        </div>
+                    <div class="col-md-4">
+                        <span class="badge badge-warning" style="font-size: 14px; padding: 8px; background-color: #e17055;">{high_count} High</span>
                     </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card bg-primary text-white mb-3">
-                        <div class="card-body">
-                            <h2 class="mb-0">{len(findings)}</h2>
-                            <small>TOTAL</small>
-                        </div>
+                    <div class="col-md-4">
+                        <span class="badge badge-info" style="font-size: 14px; padding: 8px;">{len(findings) - critical_count - high_count} Medium/Low</span>
                     </div>
                 </div>
             </div>
-            <div class="row text-center mt-2">
-                <div class="col-md-4">
-                    <span class="badge badge-danger">{critical_count} Critical</span>
-                </div>
-                <div class="col-md-4">
-                    <span class="badge badge-warning">{high_count} High</span>
-                </div>
-                <div class="col-md-4">
-                    <span class="badge badge-info">{fail_count + pass_count + unknown_count - critical_count - high_count} Others</span>
-                </div>
-            </div>
-            </div>
-        </div>
         </div>
         
-        <div class="row mt-3">
+        <!-- Findings Table -->
+        <div class="row mt-4">
         <div class="col-md-12">
             <div class="card">
-            <div class="card-header bg-secondary text-white">Security Findings</div>
+            <div class="card-header" style="background-color: #008FBF; color: white;">
+                <i class="fas fa-shield-alt"></i> Security Findings
+            </div>
             <div class="table-wrap">
             <table id="table" class="table table-striped table-hover dataTable" style="width:100%">
             <thead>
-                <tr>
+                <tr style="background-color: #f8f9fa;">
                     <th>Check ID</th>
                     <th>Status</th>
-                    <th>Resource ID</th>
+                    <th>Resource</th>
                     <th>Severity</th>
                     <th>Service</th>
                     <th>Region</th>
-                    <th>Check Title</th>
                     <th>Compliance</th>
                     <th>Status Extended</th>
-                    <th>Risk/Remediation</th>
                 </tr>
             </thead>
             <tbody>
@@ -479,8 +488,9 @@ class HTMLOutput:
         </div>
         </div>
         
-        <div class="row mt-3 mb-5">
-        <div class="col-md-12 text-center text-muted">
+        <!-- Footer -->
+        <div class="row mt-4 mb-4">
+        <div class="col-md-12 text-center text-muted" style="border-top: 1px solid #dee2e6; padding-top: 15px;">
             <small>Generated by CloudAudit | CIS AWS Foundations Benchmark</small>
         </div>
         </div>
@@ -495,7 +505,7 @@ class HTMLOutput:
                 dom: 'Blfrtip',
                 buttons: ['copy', 'csv', 'excel', 'pdf'],
                 order: [[3, 'desc'], [0, 'asc']],
-                pageLength: 50,
+                pageLength: 25,
                 scrollX: true
             }});
         }});
