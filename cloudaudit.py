@@ -247,6 +247,9 @@ def main():
     
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     
+    output_format = args.output
+    output_file = args.output_file
+    
     output_handlers = {
         "json": JSONOutput(),
         "csv": CSVOutput(),
