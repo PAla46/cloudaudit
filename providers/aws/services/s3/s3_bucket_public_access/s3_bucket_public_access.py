@@ -60,7 +60,7 @@ class s3_bucket_public_access(Check):
                 check_metadata=self._metadata,
                 resource=None
             )
-            report.status = "PASS"
+            report.status = "UNKNOWN"
             report.status_extended = "No S3 buckets found in account"
             report.region = client.region
             report.resource_id = "s3"
