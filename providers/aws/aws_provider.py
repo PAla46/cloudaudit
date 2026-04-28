@@ -1,56 +1,28 @@
 import json
+import os
 import subprocess
 from typing import Any, Optional
 
 
-class AWSCLI:
-    @staticmethod
-    def run(command: list, parse_json: bool = True) -> Any:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True
-        )
-        
-        if result.returncode != 0:
-            error_msg = result.stderr.strip() or result.stdout.strip()
-            raise AWSCLIError(f"Command failed: {' '.join(command)}\nError: {error_msg}")
-        
-        if parse_json:
-            try:
-                return json.loads(result.stdout) if result.stdout.strip() else []
-            except json.JSONDecodeError:
-                return result.stdout.strip()
-        return result.stdout
+AWS_REGIONS_FILE = os.path.join(os.path.dirname(__file__), "aws_regions_by_service.json")
 
-    @staticmethod
-    def run_paginated(command: list, next_token_key: str = "NextToken") -> list:
-        results = []
-        next_token = None
-        
-        while True:
-            cmd = command.copy()
-            if next_token:
-                cmd.extend(["--starting-token", next_token])
-            
-            output = subprocess.run(cmd, capture_output=True, text=True)
-            
-            if output.returncode != 0:
-                raise AWSCLIError(f"Command failed: {' '.join(cmd)}\n{output.stderr}")
-            
-            data = json.loads(output.stdout) if output.stdout.strip() else {}
-            
-            if isinstance(data, dict):
-                results.extend(data.get("Buckets", []) or data.get("Users", []) or data.get("Instances", []) or data.get("SecurityGroups", []))
-                next_token = data.get(next_token_key)
-            elif isinstance(data, list):
-                results.extend(data)
-                break
-            
-            if not next_token:
-                break
-        
-        return results
+GLOBAL_SERVICES = ["iam", "s3", "cloudtrail", "route53", "cloudfront", "shield", "waf", "fms"]
+
+
+def get_available_regions():
+    if os.path.exists(AWS_REGIONS_FILE):
+        with open(AWS_REGIONS_FILE) as f:
+            data = json.load(f)
+            return data.get("regions", ["us-east-1"])
+    return ["us-east-1"]
+
+
+def is_global_service(service_name):
+    if os.path.exists(AWS_REGIONS_FILE):
+        with open(AWS_REGIONS_FILE) as f:
+            data = json.load(f)
+            return service_name.lower() in data.get("global_services", [])
+    return service_name.lower() in GLOBAL_SERVICES
 
 
 class AWSCLIError(Exception):
@@ -62,6 +34,7 @@ class AWSProvider:
         self.region = region
         self.cli = AWSCLI()
         self._identity = None
+        self.available_regions = get_available_regions()
     
     @property
     def identity(self):
