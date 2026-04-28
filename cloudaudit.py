@@ -226,8 +226,41 @@ def main():
     
     audit.findings = findings
     
-    output = audit.output(args.output_file)
-    print(output)
+    account_id = ""
+    if args.provider == "aws" and audit.provider:
+        try:
+            account_id = audit.provider.identity.get("Account", "")
+        except:
+            pass
+    
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    
+    output_handlers = {
+        "json": JSONOutput(),
+        "csv": CSVOutput(),
+        "html": HTMLOutput(),
+    }
+    
+    output_format = args.output
+    output_file = args.output_file
+    
+    if output_file:
+        handler = output_handlers.get(output_format)
+        output = handler.write(findings, output_file, account_id)
+        if output_format == "json" and output:
+            print(output)
+    else:
+        base_filename = f"cloudaudit-{account_id}-{timestamp}"
+        
+        for fmt in ["json", "csv", "html"]:
+            filename = f"{base_filename}.{fmt}"
+            handler = output_handlers.get(fmt)
+            handler.write(findings, filename, account_id)
+            print(f"Generated: {filename}", file=sys.stderr)
+        
+        if output_format == "json":
+            handler = output_handlers.get("json")
+            print(handler.write(findings, None, account_id))
 
 
 if __name__ == "__main__":
