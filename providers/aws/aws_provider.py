@@ -230,11 +230,23 @@ class AWSProvider:
             return None
     
     def list_access_keys(self, user_name: str):
-        return self.cli.run([
+        keys = self.cli.run([
             "aws", "iam", "list-access-keys",
             "--user-name", user_name,
             "--output", "json"
         ]).get("AccessKeyMetadata", [])
+        
+        from datetime import datetime
+        for key in keys:
+            if key.get("CreateDate"):
+                try:
+                    create_date = datetime.strptime(key["CreateDate"], "%Y-%m-%dT%H:%M:%SZ")
+                    days_old = (datetime.now() - create_date).days
+                    key["AccessKeyDays"] = days_old
+                except:
+                    key["AccessKeyDays"] = -1
+        
+        return keys
     
     def list_security_groups(self):
         return self.cli.run_paginated([
