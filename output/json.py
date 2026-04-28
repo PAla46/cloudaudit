@@ -323,19 +323,34 @@ class HTMLOutput:
             compliance = get_requirement_mapping(check_id)
             compliance_str = ", ".join([r.get("requirement_id", "") for r in compliance])
             
+            check_title = ""
+            risk = ""
+            remediation = ""
+            
+            if hasattr(f, "check_metadata"):
+                check_title = f.check_metadata.CheckTitle
+                risk = f.check_metadata.Risk
+                if f.check_metadata.Remediation:
+                    remediation = f.check_metadata.Remediation.get("Recommendation", {}).get("Text", "")
+            
             status_class = "bg-success-custom" if data.get("status") == "PASS" else "bg-danger" if data.get("status") == "FAIL" else "bg-warning"
             
             row = f"""<tr>
                 <td>{data.get('check_id', '')}</td>
-                <td>{data.get('status', '')}</td>
+                <td class="{status_class}">{data.get('status', '')}</td>
                 <td>{data.get('resource_id', '')}</td>
                 <td>{data.get('severity', '').upper()}</td>
                 <td>{data.get('service', '')}</td>
                 <td>{data.get('region', '')}</td>
+                <td>{check_title}</td>
                 <td>{compliance_str}</td>
                 <td>{data.get('status_extended', '')}</td>
+                <td>{risk[:100]}...<br/>{remediation[:100]}...</td>
             </tr>"""
             rows.append(row)
+        
+        critical_count = sum(1 for f in findings if (hasattr(f, "check_metadata") and f.check_metadata.Severity == "critical") or (hasattr(f, "severity") and f.severity == "critical"))
+        high_count = sum(1 for f in findings if (hasattr(f, "check_metadata") and f.check_metadata.Severity == "high") or (hasattr(f, "severity") and f.severity == "high"))
         
         html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -346,65 +361,131 @@ class HTMLOutput:
         .bg-success-custom {{background-color: #98dea7 !important;}}
         .bg-danger {{background-color: #f28484 !important;}}
         .bg-warning {{background-color: #f5c518 !important;}}
+        .table-wrap {{overflow-x: auto;}}
     </style>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://cdn.datatables.net/v/dt/jqc-1.12.4/dt-1.10.25/b-1.7.1/sp-1.4.0/sl-1.3.3/datatables.min.css" />
     <link rel="stylesheet" href="https://pro.fontawesome.com/releases/v5.10.0/css/all.css" crossorigin="anonymous" />
     <style>
-        .dataTable {{font-size: 14px;}}
+        .dataTable {{font-size: 13px;}}
         .container-fluid {{font-size: 14px;}}
         .float-left {{ float: left !important; max-width: 100%; }}
+        td {{max-width: 300px; word-wrap: break-word;}}
     </style>
-    <title>CloudAudit - Cloud Security Tool</title>
+    <title>CloudAudit - Cloud Security Report</title>
 </head>
 <body>
     <div class="container-fluid">
+        <div class="row mt-3 mb-3">
+            <div class="col-md-3">
+                <img src="https://raw.githubusercontent.com/prowler-cloud/prowler/dc7d2d5aeb92fdf12e8604f42ef6472cd3e8e889/docs/img/prowler-logo-black.png" alt="CloudAudit Logo" style="width:150px;"/>
+            </div>
+            <div class="col-md-9">
+                <h2>CloudAudit Security Report</h2>
+            </div>
+        </div>
+        
         <div class="row mt-3">
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card">
-            <div class="card-header">Report Information</div>
+            <div class="card-header bg-primary text-white">Report Information</div>
             <ul class="list-group list-group-flush">
-                <li class="list-group-item"><b>Version:</b> 0.1.0</li>
-                <li class="list-group-item"><b>Parameters used:</b> aws</li>
+                <li class="list-group-item"><b>Tool:</b> CloudAudit 0.1.0</li>
+                <li class="list-group-item"><b>Provider:</b> AWS</li>
                 <li class="list-group-item"><b>Date:</b> {timestamp}</li>
                 <li class="list-group-item"><b>Account ID:</b> {account_id}</li>
+                <li class="list-group-item"><b>Framework:</b> CIS AWS Foundations</li>
             </ul>
             </div>
         </div>
-        <div class="col-md-8">
+        <div class="col-md-9">
             <div class="card">
-            <div class="card-header">Summary</div>
-            <ul class="list-group list-group-flush">
-                <li class="list-group-item bg-success-custom"><b>PASS:</b> {pass_count}</li>
-                <li class="list-group-item bg-danger"><b>FAIL:</b> {fail_count}</li>
-                <li class="list-group-item bg-warning"><b>UNKNOWN:</b> {unknown_count}</li>
-                <li class="list-group-item"><b>TOTAL:</b> {len(findings)}</li>
-            </ul>
+            <div class="card-header bg-primary text-white">Executive Summary</div>
+            <div class="row text-center">
+                <div class="col-md-3">
+                    <div class="card bg-danger text-white mb-3">
+                        <div class="card-body">
+                            <h2 class="mb-0">{fail_count}</h2>
+                            <small>FAIL</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-success-custom text-white mb-3">
+                        <div class="card-body">
+                            <h2 class="mb-0">{pass_count}</h2>
+                            <small>PASS</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-warning mb-3">
+                        <div class="card-body">
+                            <h2 class="mb-0">{unknown_count}</h2>
+                            <small>UNKNOWN</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-primary text-white mb-3">
+                        <div class="card-body">
+                            <h2 class="mb-0">{len(findings)}</h2>
+                            <small>TOTAL</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row text-center mt-2">
+                <div class="col-md-4">
+                    <span class="badge badge-danger">{critical_count} Critical</span>
+                </div>
+                <div class="col-md-4">
+                    <span class="badge badge-warning">{high_count} High</span>
+                </div>
+                <div class="col-md-4">
+                    <span class="badge badge-info">{fail_count + pass_count + unknown_count - critical_count - high_count} Others</span>
+                </div>
+            </div>
             </div>
         </div>
         </div>
+        
         <div class="row mt-3">
         <div class="col-md-12">
+            <div class="card">
+            <div class="card-header bg-secondary text-white">Security Findings</div>
+            <div class="table-wrap">
             <table id="table" class="table table-striped table-hover dataTable" style="width:100%">
             <thead>
                 <tr>
                     <th>Check ID</th>
                     <th>Status</th>
-                    <th>Resource</th>
+                    <th>Resource ID</th>
                     <th>Severity</th>
                     <th>Service</th>
                     <th>Region</th>
+                    <th>Check Title</th>
                     <th>Compliance</th>
-                    <th>Message</th>
+                    <th>Status Extended</th>
+                    <th>Risk/Remediation</th>
                 </tr>
             </thead>
             <tbody>
                 {''.join(rows)}
             </tbody>
             </table>
+            </div>
+            </div>
+        </div>
+        </div>
+        
+        <div class="row mt-3 mb-5">
+        <div class="col-md-12 text-center text-muted">
+            <small>Generated by CloudAudit | CIS AWS Foundations Benchmark</small>
         </div>
         </div>
     </div>
+    
     <script src="https://code.jquery.com/jquery-3.5.0.min.js" crossorigin="anonymous"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.datatables.net/v/dt/jqc-1.12.4/dt-1.10.25/b-1.7.1/sp-1.4.0/sl-1.3.3/datatables.min.js"></script>
@@ -412,8 +493,10 @@ class HTMLOutput:
         $(document).ready(function() {{
             $('#table').DataTable({{
                 dom: 'Blfrtip',
-                buttons: ['copy', 'csv', 'pdf'],
-                order: [[0, 'asc'], [3, 'desc']]
+                buttons: ['copy', 'csv', 'excel', 'pdf'],
+                order: [[3, 'desc'], [0, 'asc']],
+                pageLength: 50,
+                scrollX: true
             }});
         }});
     </script>
