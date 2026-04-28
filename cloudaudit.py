@@ -76,6 +76,18 @@ class CloudAudit:
             
             try:
                 findings = check.execute()
+                if not findings:
+                    from lib.check.models import Check_Report_AWS
+                    report = Check_Report_AWS(
+                        check_id=check.CheckID,
+                        check_metadata=check._metadata,
+                        resource=None
+                    )
+                    report.status = "PASS"
+                    report.status_extended = f"No {check.service_name} issues found"
+                    report.region = "us-east-1"
+                    report.resource_id = check.service_name
+                    findings.append(report)
                 self.findings.extend(findings)
             except Exception as e:
                 print(f"Error running check {check.CheckID}: {e}", file=sys.stderr)
